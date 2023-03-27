@@ -5,7 +5,7 @@ from models.MinMaxNorm import MinMaxNorm01
 from os import listdir
 from os.path import isfile,join
 import rasterio
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
 class MilanSlidingWindowDataset(Dataset):
@@ -17,8 +17,9 @@ class MilanSlidingWindowDataset(Dataset):
                  crop, rows=[0, 100], cols=[0, 100],
                  mode:str = 'train',
                  window_size: int = 10,
-                 input_len: int = 12,
-                 pred_len: int = 1,
+                 stride: int = 24,
+                 input_len: int = 24,
+                 pred_len: int = 24,
                  flatten: bool = False,):
         hf = h5py.File(filename, 'r')
         milan_traffic = np.array(hf.get('data'))
@@ -50,6 +51,7 @@ class MilanSlidingWindowDataset(Dataset):
                                      'constant', constant_values=0)
         self.Hsize = self.milan_traffic_chosen_mmn_pad.shape[1]//window_size
         self.Wsize = self.milan_traffic_chosen_mmn_pad.shape[2]//window_size
+        self.stride = stride
         
     def _trafficloader(self, crop, rows=[0, 100], cols=[0, 100]):
         if self.traffic_type == 'sms':
@@ -68,11 +70,16 @@ class MilanSlidingWindowDataset(Dataset):
         return data
 
     def mmn(self):
-        mmn = MinMaxNorm01()
-        data_train = self.milan_traffic_chosen[:-self.len_test]
-        mmn.fit(data_train)
+        mmn = StandardScaler()
+        T,H,W = self.milan_traffic_chosen.shape
+        data_mmn = mmn.fit_transform(self.milan_traffic_chosen.reshape(T,H*W))
 
-        return mmn.transform(self.milan_traffic_chosen), mmn
+        return data_mmn.reshape(T,H,W), mmn
+        # mmn = MinMaxNorm01()
+        # data_train = self.milan_traffic_chosen[:-self.len_test]
+        # mmn.fit(data_train)
+
+        # return mmn.transform(self.milan_traffic_chosen), mmn
 
     def _gisloader(self):
         onlyfiles = [f for f in listdir(self.gisdirpath) if isfile(join(self.gisdirpath,f))]
@@ -86,21 +93,21 @@ class MilanSlidingWindowDataset(Dataset):
 
         gisall = np.vstack(x_gis)
         C,H,W = gisall.shape
-        mmn = MinMaxScaler()
+        mmn = StandardScaler()
         gisall_mmn = mmn.fit_transform(gisall.transpose(1,2,0).reshape(H*W,C))
         gisall_mmn = gisall_mmn.reshape(H,W,C).transpose(2,0,1)
         return gisall_mmn, C
 
     def __len__(self):
         if self.mode == 'train':
-            return (self.milan_traffic_chosen_mmn_pad.shape[0]-self.input_len-self.pred_len+1-self.len_test) * self.Hsize * self.Wsize
+            return ((self.milan_traffic_chosen_mmn_pad.shape[0]-self.input_len-self.pred_len-self.len_test)//self.stride + 1) * self.Hsize * self.Wsize 
         elif self.mode == 'test':
-            return self.len_test * self.Hsize * self.Wsize
+            return ((self.len_test-self.pred_len) // self.stride +1)* self.Hsize * self.Wsize 
         else:
             raise IOError("Unknown mode")
 
     def __getitem__(self, index):
-        n_slice = index // (self.Hsize * self.Wsize)
+        n_slice = index // (self.Hsize * self.Wsize) * self.stride
         n_row = (index % (
             self.Hsize * self.Wsize)) // self.Wsize
         n_col = (index % (
@@ -108,7 +115,7 @@ class MilanSlidingWindowDataset(Dataset):
         if self.mode == 'train':
             n_slice = n_slice
         elif self.mode == 'test':
-            n_slice = n_slice + self.milan_traffic_chosen_mmn_pad.shape[0]-self.input_len-self.pred_len+1-self.len_test
+            n_slice = n_slice + self.milan_traffic_chosen_mmn_pad.shape[0]-self.input_len-self.len_test
         else:
             raise IOError("Unknown mode")
 
@@ -125,4 +132,5 @@ class MilanSlidingWindowDataset(Dataset):
             XC = XC.reshape((self.input_len, self.window_size * self.window_size))
             XG = XG.reshape((self.gisnum, self.window_size * self.window_size))
             y = y.reshape((self.pred_len, self.window_size * self.window_size))
-        return (XC, XG, y) 
+
+        return (XG, XC, y) 

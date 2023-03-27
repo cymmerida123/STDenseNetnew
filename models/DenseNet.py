@@ -99,17 +99,17 @@ class DenseNet(nn.Module):
         self.nb_flows = nb_flows
         self.channels = channels
 
-        self.close_feature = DenseNetUnit(channels[0], nb_flows)
-        self.gis_feature = DenseNetUnit(channels[1], nb_flows)
+        self.gis_feature = DenseNetUnit(channels[0], nb_flows)
+        self.close_feature = DenseNetUnit(channels[1], nb_flows)
         # self.trend_feature = DenseNetUnit(channels[2], nb_flows)
 
     def forward(self, inputs):
         out = 0
         if self.channels[0] > 0:
-            out += self.close_feature(inputs[0])
+            out += self.gis_feature(inputs[0])
         if self.channels[1] > 0:
-            out += self.gis_feature(inputs[1])
+            out += self.close_feature(inputs[1])
         # if self.channels[2] > 0:
         #     out += self.trend_feature(inputs[2])
 
-        return torch.sigmoid(out)
+        return out

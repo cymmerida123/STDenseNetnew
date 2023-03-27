@@ -229,8 +229,8 @@ def predict(test_type='train'):
         row_length, col_length = ground_truth.shape[-2:]
         row, col = int(row_length / 2), int(col_length / 2)
     plt.figure()
-    plt.plot(final_predict[39::100, 0, row, col] * (mmn.max - mmn.min), 'r-', label='Predicted')
-    plt.plot(ground_truth[39::100, 0, row, col] * (mmn.max - mmn.min), 'k-', label='GroundTruth')
+    plt.plot(final_predict[0::100, 0, row, col] * (mmn.max - mmn.min), 'r-', label='Predicted')
+    plt.plot(ground_truth[0::100, 0, row, col] * (mmn.max - mmn.min), 'k-', label='GroundTruth')
     plt.legend(loc='upper right')
     plt.savefig('./results/predictions.png')
     # plt.show()
